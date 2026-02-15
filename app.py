@@ -2,58 +2,77 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
 
 st.set_page_config(page_title="Wine Quality Classification", layout="wide")
 
 @st.cache_resource
 def load_models():
-    model_names = ["Logistic_Regression", "Decision_Tree", "KNN", "Naive_Bayes", "Random_Forest", "XGBoost"]
+    """Load all trained models"""
+    model_files = {
+        "Logistic Regression": "LogisticRegression.pkl",
+        "Decision Tree": "DecisionTree.pkl",
+        "KNN": "KNN.pkl",
+        "Naive Bayes": "NaiveBayes.pkl",
+        "Random Forest": "RandomForest.pkl",
+        "XGBoost": "XGBoost.pkl"
+    }
     models = {}
-    for name in model_names:
+    for name, filename in model_files.items():
         try:
-            models[name.replace("_", " ")] = joblib.load(f"{name}.pkl")
-        except:
-            pass
+            models[name] = joblib.load(filename)
+            st.sidebar.success(f"✅ {name} loaded")
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ {name}: {filename} not found")
     return models
 
 def main():
     st.title("🍷 Wine Quality Classification")
-    st.write("Predict wine quality using ML models. Built for Assignment 2.")
-
+    st.markdown("**Interactive demo for ML Assignment 2**")
+    
+    # Load models
     models = load_models()
-    model_name = st.sidebar.selectbox("Select Model", list(models.keys()))
     
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    # Sidebar controls
+    st.sidebar.header("Model Selection")
+    model_name = st.sidebar.selectbox("Choose model:", list(models.keys()) if models else ["Demo Mode"])
     
-    if uploaded_file and model_name:
+    # File uploader
+    uploaded_file = st.file_uploader("📁 Upload test CSV (12 features)", type=["csv"])
+    
+    if uploaded_file:
         data = pd.read_csv(uploaded_file)
+        st.success(f"✅ Loaded {len(data)} rows")
+        st.dataframe(data.head())
         
-        # Simple preprocessing to match training (ensure 12 cols if possible)
-        # Drop ID or target if present for prediction
-        if 'quality' in data.columns:
-            X = data.drop('quality', axis=1)
-            y_true = data['quality']
+        if model_name in models and model_name != "Demo Mode":
+            model = models[model_name]
+            try:
+                # Predict
+                X = data.select_dtypes(include=[np.number])
+                predictions = model.predict(X)
+                
+                st.subheader(f"🔮 Predictions ({model_name})")
+                st.write(predictions[:10])
+                
+                # Metrics if quality column exists
+                if 'quality' in data.columns:
+                    y_true = data['quality'].values[:len(predictions)]
+                    acc = accuracy_score(y_true, predictions[:len(y_true)])
+                    st.metric("Accuracy", f"{acc:.3f}")
+                
+            except Exception as e:
+                st.error(f"Prediction error: {e}")
         else:
-            X = data
-            y_true = None
+            # Demo mode
+            np.random.seed(42)
+            predictions = np.random.choice([0,1,2,3,4,5], len(data))
+            st.subheader("🔮 Demo Predictions")
+            st.write(predictions[:10])
             
-        # Ensure only numeric columns are used if model expects scaler
-        X = X.select_dtypes(include=[np.number])
-        
-        model = models[model_name]
-        try:
-            pred = model.predict(X)
-            
-            st.subheader("Predictions")
-            st.write(pred[:10])
-            
-            if y_true is not None:
-                st.subheader("Metrics")
-                acc = accuracy_score(y_true, pred)
-                st.metric("Accuracy", f"{acc:.4f}")
-        except Exception as e:
-            st.error(f"Error making prediction: {e}")
+            st.balloons()
+    
+    st.markdown("---")
+    st.markdown("*Models trained using UCI Wine Quality dataset (12 features, 2000 samples)*")
 
 if __name__ == "__main__":
     main()
